@@ -14,8 +14,9 @@
 #include <stdbool.h>
 
 /* Constants defining floating point precision */
-#define tol 0.00000001
-#define tot_digits 10
+#define TOL 0.0000001
+#define TOT_DIGITS 12
+#define MAX_PRECISION 7
 
 /* Enum representing binary operations, and default (no operation) */
 typedef enum {
@@ -27,7 +28,7 @@ typedef enum {
     (((op) == DIV) ? ((a) / (b)) : \
      ((op) == MUL) ? ((a) * (b)) : \
      ((op) == ADD) ? ((a) + (b)) : \
-     ((op) == SUB) ? ((a) - (b)) : 0)
+     ((op) == SUB) ? ((a) - (b)) : b)
 
 /* Given an operator, returns the ASCII character representing it, as a
  * string, or the string "\0" if the operator is invalid or DEFAULT */
@@ -79,67 +80,49 @@ static char *get_display(Data *data)
     return (char *)gtk_frame_get_label(GTK_FRAME(data->f));
 }
 
-/* Converts double to string given number of digits of precision.
- * Note: Allocates heap memory, which is freed by display_num. */
+/* Converts double to string given number of digits of precision. */
 static char *precise_num2str(double num, int precision)
 {
-    char *str = (char *)malloc(tot_digits + 1);
-    if (str == NULL) {
-        g_print("Malloc Error\n");
-        return NULL;
-    }
-    sprintf(str, "%.*f", precision, num);
-    return str;
+    static char buffer[TOT_DIGITS + 1]; /* reusable static buffer */
+    snprintf(buffer, sizeof(buffer), "%.*f", precision, num);
+    return buffer;
 }
 
 /* Creates a string representation of the given number */
 static char *num2str(double num, bool decimal, int decimals)
 {
-    /* handle case where num = 0 */
-    if (num == 0) {
-        return precise_num2str(0, 0);
-    }
+    if (decimal) return precise_num2str(num, decimals);
+    if (num == 0) return precise_num2str(0, 0); 
 
-    /* if decimal number is being entered, include all digits entered */
-    if (decimal) {
-        return precise_num2str(num, decimals);
-    }
+    /* num can be displayed with 0-7 digits of precision */
+    for (int i = 0; i <= MAX_PRECISION; i++) {
 
-    /* handle case where num can be displayed precisely
-     * with 0-7 digits after decimal point */
-    for (int i = 0; i < 8; i++) {
-
-        /* round num to i digits after decimal point */
+        /* round to i digits after decimal point */
         double factor = pow(10, i);
         int shifted = round(num * factor);
         double rounded = (double)shifted / factor;
 
         /* check whether num is close to rounded counterpart */
-        if (fabs(num - rounded) < tol) {
+        if (fabs(num - rounded) < TOL) {
             return precise_num2str(rounded, i);
         }
     }
 
-    int int_part = (int)num; /* part of num before decimal point */
-
-    /* number of digits before the decimal */
+    int int_part = (int)num;
+    /* number of digits before decimal point */
     int int_digits = (int_part == 0) ? 0 : ceil(log10(abs(int_part)));
 
     /* num has > 7 digits after decimal point */
-    int precision = tot_digits - int_digits;
-    if (precision < 0) {
-        precision = 0;
-    }
+    int precision = TOT_DIGITS - int_digits;
+    if (precision < 0) precision = 0;
     return precise_num2str(num, precision);
 }
 
-/* Displays a given number on the calculator's screen.
- * Note: frees memory allocated by precise_num2str. */
+/* Displays a given number on the calculator's screen. */
 static void display_num(double num, Data *data)
 {
     char *num_displayed = num2str(num, data->decimal, data->decimals);
     display_str(data, num_displayed);
-    free(num_displayed);
 }
 
 /* Handles numerical input into calculator */
@@ -147,46 +130,41 @@ static void entering(GtkWidget *widget, gpointer user_data)
 {
     Data *data = (Data *)user_data;
     char *prev = get_display(data); /* previous display */
-
-    /* get the label of button just pressed */
     char *button_label = (char *)gtk_button_get_label(GTK_BUTTON(widget));
     double entered_num = strtof(button_label, NULL);
 
-    /* if prev is an operator: save and display the entered number */
-    operator op = str_to_op(prev);
-    if (op != DEFAULT) {
+    /* if previous display shows an operator */
+    if (str_to_op(prev) != DEFAULT) {
         display_str(data, button_label);
         data->num = entered_num;
         return;
     }
 
-    /* ignore leading zeros */
-    if (strcmp(prev, "0") == 0 && entered_num == 0) {
-        display_str(data, button_label);
-        data->num = 0;
-        return;
-    }
-
-    /* if prev is divide by 0 error: reset and display entered number */
-    if (strcmp(prev, "Divide by 0") == 0) {
+    /* if previous display shows inf */
+    if (strcmp(prev, "inf") == 0) {
         display_str(data, button_label);
         data->num = 0;
         data->result = 0;
+    }
+
+    /* ignore leading zeros */
+    if (strcmp(prev, "0") == 0 && entered_num == 0) {
+        data->num = 0;
+        return;
     }
 
     /* handle decimal fraction input mode */
     if (data->decimal) {
         data->decimals++;
         double factor = pow(10, data->decimals);
-        if (data->num >= 0) {
+
+        if (data->num < 0) { /* negative decimal */
+            data->num -= (entered_num / factor);
+        } else {
             data->num += (entered_num / factor);
         }
-        else {
-            data->num -= (entered_num / factor);
-        }
-
     }
-    else { /* append entered digit to current number */
+    else { /* append entered digit to the displayed integer */
         data->num = data->num * 10 + entered_num;
     }
 
@@ -194,7 +172,7 @@ static void entering(GtkWidget *widget, gpointer user_data)
 }
 
 /* Handles the (-) button */
-static void neg(GtkWidget *widget, gpointer user_data)
+static void sign(GtkWidget *widget, gpointer user_data)
 {
     Data *data = (Data *)user_data;
     data->decimal = false; /* exit decimal fraction input mode */
@@ -229,54 +207,22 @@ static void percent(GtkWidget *widget, gpointer user_data)
 static void point(GtkWidget *widget, gpointer user_data)
 {
     Data *data = (Data *)user_data;
+
+    /* ignore repeated decimal points */
+    if (data->decimal) return;
+
     char *prev_num = get_display(data);
 
-    /* this button is ignored if an operation is being performed */
+    /* if a binary operation is not being performed */
     if (str_to_op(prev_num) == DEFAULT) {
-        strcat(prev_num, ".");  /* append decimal point */
-        data->decimal = true;   /* enter decimal fraction input mode */
+        strcat(prev_num, ".");
+        data->decimal = true;
         display_str(data, prev_num);
     }
 }
 
-/* Evaluates the current expression saved in the calculator */
-static void evaluate(Data *data) {
-    GtkWidget *frame = data->f;
-    operator op = data->op;
-
-    /* data->result = data->result [op] data->num */
-    switch(op) {
-
-        case DIV:
-            /* handle division by zero */
-            if (data->num == 0) {
-                display_str(data, "Divide by 0");
-                data->result = 0;
-                data->op = DEFAULT;
-                break;
-            }
-            data->result /= data->num;
-            break;
-        
-        case MUL:
-            data->result *= data->num;
-            break;
-
-        case SUB:
-            data->result -= data->num;
-            break;
-
-        case ADD:
-            data->result += data->num;
-            break;
-
-        case DEFAULT:
-            g_print("Error: tried to perform DEFAULT\n");
-            break;
-    }
-}
-
-/* Handles binary operator inputs, as well as "=" */
+/* Handles binary operator inputs, as well as "=".
+ * Note: Division by zero results in "inf" */
 static void binary_op(GtkWidget *widget, gpointer user_data)
 {
     char *button_label = (char *)gtk_button_get_label(GTK_BUTTON(widget));
@@ -292,70 +238,19 @@ static void binary_op(GtkWidget *widget, gpointer user_data)
     data->decimal = false; /* exit decimal fraction input mode */
     data->decimals = 0;
 
-    /* if op is the first operand in an expression, e.g "+" in "2 + 3 × 4" */
-    if (data->op == DEFAULT) {
-        data->result = data->num;
-    }
-    else {
-        evaluate(data); /* evaluate previous expression */
-    }
-
+    /* evaluate stored expression */
+    data->result = do_op(data->result, data->op, data->num);
     data->op = op;
 
-    /* display next operation to be performed */
-    if (op != DEFAULT) {
-        display_str(data, op_to_str(op));
-        return;
-    }
-
-    /* if "=" was entered, display result (unless divide by 0 error) */
-    char *curr_label = get_display(data);
-    if (strcmp(curr_label, "Divide by 0") != 0) {
-        display_num(data->result, data);
-    }
-    data->num = data->result; /* store result as current number */
-    data->result = 0;
-}
-
-/* Handles binary operator inputs, as well as "=" */
-static void equal(GtkWidget *widget, gpointer user_data)
-{
-    char *button_label = (char *)gtk_button_get_label(GTK_BUTTON(widget));
-    operator op = str_to_op(button_label);
-
-    /* do nothing if no operation is being performed, i.e. if user enters
-     * an expression with no binary operation, such as "3 =" */
+    /* if "=" was entered, display result */
     if (op == DEFAULT) {
-        return;
-    }
-
-    Data *data = (Data *)user_data;
-    data->decimal = false; /* exit decimal fraction input mode */
-    data->decimals = 0;
-
-    /* if op is the first operand in an expression, e.g "+" in "2 + 3 × 4" */
-    if (data->op == DEFAULT) {
-        data->result = data->num;
-    }
-    else {
-        evaluate(data);  /* evaluate previous expression */
-    }
-
-    data->op = op;
-
-    /* display next operation to be performed */
-    if (op != DEFAULT) {
-        display_str(data, op_to_str(op));
-        return;
-    }
-
-    /* if "=" was entered, display result (unless divide by 0 error) */
-    char *curr_label = get_display(data);
-    if (strcmp(curr_label, "Divide by 0") != 0) {
         display_num(data->result, data);
+        data->num = data->result;
+        data->result = 0;
+        return;
     }
-    data->num = data->result; /* store result as current number */
-    data->result = 0;
+
+    display_str(data, op_to_str(op));
 }
 
 /* Clears and resets the calculator */
@@ -411,7 +306,7 @@ static void activate(GtkApplication *app, gpointer user_data)
 
     /* create non-numerical buttons */
     new_button(grid, "C", clear, user_data, 0, 1);
-    new_button(grid, "+/-", neg, user_data, 1, 1);
+    new_button(grid, "+/-", sign, user_data, 1, 1);
     new_button(grid, "%", percent, user_data, 2, 1);
     new_button(grid, ".", point, user_data, 2, 5);
     new_button(grid, "÷", binary_op, user_data, 3, 1);
@@ -450,7 +345,7 @@ int main(int argc, char *argv[])
     int status = g_application_run(G_APPLICATION(app), argc, argv);
 
     /* clean up application resources */
-    g_object_unref(app);
+    g_clear_object(&app);
     free(data);
 
     return status;
