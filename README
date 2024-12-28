@@ -26,7 +26,7 @@ https://www.gtk.org/docs/installations/
 
 ## Building and Running the Program
 1. Once the dependencies are installed, build the program using `make`.
-2. After building, run the program using `./calc`.
+2. After building, run the program using `./calc`. 
 
 ## Contributing
 Pull requests are welcome. For major changes, please open an issue
