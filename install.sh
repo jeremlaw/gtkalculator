@@ -11,6 +11,10 @@ install_linux() {
     sudo apt install -y libgtk-4-dev # Install GTK4
 
     echo "GTK4 and dependencies installed successfully."
+
+    # Set PKG_CONFIG_PATH if necessary
+    PKG_CONFIG_PATH=$(pkg-config --variable pc_path pkg-config)
+    export PKG_CONFIG_PATH
 }
 
 # Function to install dependencies for macOS
@@ -26,6 +30,10 @@ install_macos() {
     brew install gtk4 # Install GTK4 via Homebrew
 
     echo "GTK4 and dependencies installed successfully on macOS."
+
+    # Set PKG_CONFIG_PATH if necessary for macOS
+    PKG_CONFIG_PATH=$(pkg-config --variable pc_path pkg-config)
+    export PKG_CONFIG_PATH
 }
 
 # Function to handle Linux or macOS based on the operating system

@@ -243,7 +243,7 @@ static void evaluate(Data *data) {
     /* data->result = data->result [data->op] data->num */
     switch(op) {
 
-         case DIV:
+        case DIV:
             /* handle division by zero */
             if (data->num == 0) {
                 display_str(data, "Divide by 0");
@@ -251,7 +251,6 @@ static void evaluate(Data *data) {
                 data->op = DEFAULT;
                 break;
             }
-            /* division by nonzero number (includes div of zero) */
             data->result /= data->num;
             break;
         
@@ -275,6 +274,47 @@ static void evaluate(Data *data) {
 
 /* Handles binary operator inputs, as well as "=" */
 static void binary_op(GtkWidget *widget, gpointer user_data)
+{
+    char *button_label = (char *)gtk_button_get_label(GTK_BUTTON(widget));
+    operator op = str_to_op(button_label);
+
+    /* do nothing if no operation is being performed, i.e. if user enters
+     * an expression with no binary operation, such as "3 = " */
+    if (op == DEFAULT && strcmp(button_label, "=") != 0) {
+        return;
+    }
+
+    Data *data = (Data *)user_data;
+    data->decimal = false; /* exit decimal fraction input mode */
+    data->decimals = 0;
+
+    /* if op is the first operand in an expression, e.g '+' in "2 + 3 × 4" */
+    if (data->op == DEFAULT) {
+        data->result = data->num;
+    }
+    else {
+        evaluate(data);  /* evaluate previous expression */
+    }
+
+    data->op = op;
+
+    /* display next operation to be performed */
+    if (op != DEFAULT) {
+        display_str(data, op_to_str(op));
+        return;
+    }
+
+    /* if "=" was entered, display result (unless divide by 0 error) */
+    char *curr_label = get_display(data);
+    if (strcmp(curr_label, "Divide by 0") != 0) {
+        display_num(data->result, data);
+    }
+    data->num = data->result; /* store result as current number */
+    data->result = 0;
+}
+
+/* Handles binary operator inputs, as well as "=" */
+static void equal(GtkWidget *widget, gpointer user_data)
 {
     char *button_label = (char *)gtk_button_get_label(GTK_BUTTON(widget));
     operator op = str_to_op(button_label);

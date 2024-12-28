@@ -13,12 +13,11 @@ Ensure that the following are installed:
 
 ### Option 1: Use Setup Script (Recommended for Linux/MacOS)
 1. Clone the repository:
+   git clone https://github.com/jeremlaw/gtkalculator.git
+   cd gtkalculator
 
-   ```bash
-   git clone https://github.com/jeremlaw/calculator.git
-   cd calculator
 2. Run the installation script:
-    ```bash
+    chmod +x install.sh
     ./install.sh
 
 ### Option 2: Manual Installation
@@ -26,13 +25,8 @@ Steps for manual installation can be found at:
 https://www.gtk.org/docs/installations/
 
 ## Building and Running the Program
-Once the dependencies are installed, build the program using:
-    ```bash
-    make
-
-After building, run the program using:
-    ```bash
-    ./calc
+1. Once the dependencies are installed, build the program using `make`.
+2. After building, run the program using `./calc`.
 
 ## Contributing
 Pull requests are welcome. For major changes, please open an issue
