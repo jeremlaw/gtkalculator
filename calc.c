@@ -4,7 +4,8 @@
  * This file contains the implementation of a calculator.
  * In order to run this program, GTK4 must be downloaded.
  * This can be downloaded at https://www.gtk.org/
- */
+ * 
+ *******************************************************/
 
 #include <gtk/gtk.h> /* GTK Toolkit (version 4 required) */
 #include <stdlib.h>
@@ -28,20 +29,16 @@ typedef enum {
      ((op) == ADD) ? ((a) + (b)) : \
      ((op) == SUB) ? ((a) - (b)) : 0)
 
-/*
- * Given an operator, returns the ASCII character representing it, as
- * a string, or the string "\0" if the operator is invalid or DEFAULT
- */
+/* Given an operator, returns the ASCII character representing it, as a
+ * string, or the string "\0" if the operator is invalid or DEFAULT */
 #define op_to_str(op) \
     (((op) == DIV) ? ("÷") : \
      ((op) == MUL) ? ("\u00D7") : \
      ((op) == ADD) ? ("+") : \
      ((op) == SUB) ? ("-") : "\0")
 
-/*
- * Given a string, returns the operator it represents. If the string
- * does not represent an operator, returns the default operator
- */
+/* Given a string, returns the operator it represents. If the string
+ * does not represent an operator, returns the default operator */
 #define str_to_op(str) \
     ((strcmp((str), ("÷")) == 0) ? (DIV) : \
      (strcmp((str), ("\u00D7")) == 0) ? (MUL) : \
@@ -60,12 +57,12 @@ typedef struct Data {
     int decimals;
 
     /* Current operation being performed. For example, if the user inputs
-     * "2 + 2 = ", then op = DEFAULT until '+' is pressed, at which point
-     * op = ADD until '=' is entered. */
+     * "2 + 2 =", then op = DEFAULT until "+" is pressed, at which point
+     * op = ADD until "=" is entered. */
     operator op;
 
     double num;    /* Stores the current number being entered */
-    double result; /* Result of operations since the last 'Clear' or '=' */
+    double result; /* Result of operations since the last "Clear" or "=" */
 
     GtkWidget *f;  /* Frame object acting as calculator's display screen */
 } Data;
@@ -82,7 +79,8 @@ static char *get_display(Data *data)
     return (char *)gtk_frame_get_label(GTK_FRAME(data->f));
 }
 
-/* Converts double to string given number of digits of precision */
+/* Converts double to string given number of digits of precision.
+ * Note: Allocates heap memory, which is freed by display_num. */
 static char *precise_num2str(double num, int precision)
 {
     char *str = (char *)malloc(tot_digits + 1);
@@ -135,7 +133,8 @@ static char *num2str(double num, bool decimal, int decimals)
     return precise_num2str(num, precision);
 }
 
-/* Displays the current number on the calculator */
+/* Displays a given number on the calculator's screen.
+ * Note: frees memory allocated by precise_num2str. */
 static void display_num(double num, Data *data)
 {
     char *num_displayed = num2str(num, data->decimal, data->decimals);
@@ -147,7 +146,7 @@ static void display_num(double num, Data *data)
 static void entering(GtkWidget *widget, gpointer user_data)
 {
     Data *data = (Data *)user_data;
-    char *prev = get_display(data);  /* previous display on the calulator */
+    char *prev = get_display(data); /* previous display */
 
     /* get the label of button just pressed */
     char *button_label = (char *)gtk_button_get_label(GTK_BUTTON(widget));
@@ -179,7 +178,12 @@ static void entering(GtkWidget *widget, gpointer user_data)
     if (data->decimal) {
         data->decimals++;
         double factor = pow(10, data->decimals);
-        data->num += (entered_num / factor);
+        if (data->num >= 0) {
+            data->num += (entered_num / factor);
+        }
+        else {
+            data->num -= (entered_num / factor);
+        }
 
     }
     else { /* append entered digit to current number */
@@ -240,7 +244,7 @@ static void evaluate(Data *data) {
     GtkWidget *frame = data->f;
     operator op = data->op;
 
-    /* data->result = data->result [data->op] data->num */
+    /* data->result = data->result [op] data->num */
     switch(op) {
 
         case DIV:
@@ -279,7 +283,7 @@ static void binary_op(GtkWidget *widget, gpointer user_data)
     operator op = str_to_op(button_label);
 
     /* do nothing if no operation is being performed, i.e. if user enters
-     * an expression with no binary operation, such as "3 = " */
+     * an expression with no binary operation, such as "3 =" */
     if (op == DEFAULT && strcmp(button_label, "=") != 0) {
         return;
     }
@@ -288,12 +292,12 @@ static void binary_op(GtkWidget *widget, gpointer user_data)
     data->decimal = false; /* exit decimal fraction input mode */
     data->decimals = 0;
 
-    /* if op is the first operand in an expression, e.g '+' in "2 + 3 × 4" */
+    /* if op is the first operand in an expression, e.g "+" in "2 + 3 × 4" */
     if (data->op == DEFAULT) {
         data->result = data->num;
     }
     else {
-        evaluate(data);  /* evaluate previous expression */
+        evaluate(data); /* evaluate previous expression */
     }
 
     data->op = op;
@@ -320,7 +324,7 @@ static void equal(GtkWidget *widget, gpointer user_data)
     operator op = str_to_op(button_label);
 
     /* do nothing if no operation is being performed, i.e. if user enters
-     * an expression with no binary operation, such as "3 = " */
+     * an expression with no binary operation, such as "3 =" */
     if (op == DEFAULT) {
         return;
     }
@@ -329,7 +333,7 @@ static void equal(GtkWidget *widget, gpointer user_data)
     data->decimal = false; /* exit decimal fraction input mode */
     data->decimals = 0;
 
-    /* if op is the first operand in an expression, e.g '+' in "2 + 3 × 4" */
+    /* if op is the first operand in an expression, e.g "+" in "2 + 3 × 4" */
     if (data->op == DEFAULT) {
         data->result = data->num;
     }
@@ -442,7 +446,7 @@ int main(int argc, char *argv[])
     /* connect "activate" signal to the activate callback */
     g_signal_connect(app, "activate", G_CALLBACK(activate), data);
 
-    /* Run the application */
+    /* run the application */
     int status = g_application_run(G_APPLICATION(app), argc, argv);
 
     /* clean up application resources */
