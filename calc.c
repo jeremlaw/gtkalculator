@@ -18,13 +18,15 @@
 #define TOT_DIGITS 12
 #define MAX_PRECISION 7
 
+#define pi 3.141592654
+
 /* Enum representing binary operations, and default (no operation) */
 typedef enum {
     DIV, MUL, ADD, SUB, DEFAULT
 } operator;
 
 /* Performs binary operation on a and b */
-#define do_op(a, op, b) \
+#define bin_op(a, op, b) \
     (((op) == DIV) ? ((a) / (b)) : \
      ((op) == MUL) ? ((a) * (b)) : \
      ((op) == ADD) ? ((a) + (b)) : \
@@ -45,6 +47,37 @@ typedef enum {
      (strcmp((str), ("\u00D7")) == 0) ? (MUL) : \
      (strcmp((str), ("+")) == 0) ? (ADD) : \
      (strcmp((str), ("-")) == 0) ? (SUB) : DEFAULT)
+
+/* Enum representing special unary operations */
+typedef enum {
+    FAC, SQT, CBT, SGN, PCT, SQR, CUB, SIN, COS, TAN, NUL
+} special;
+
+/* Performs binary operation on a and b */
+#define un_op(a, op) \
+    (((op) == FAC) ? (tgamma((a) + 1)) : \
+     ((op) == SQT) ? (sqrt(a)) : \
+     ((op) == CBT) ? (cbrt(a)) : \
+     ((op) == SGN) ? (0 - (a)) : \
+     ((op) == PCT) ? ((a) / (float)100) : \
+     ((op) == SQR) ? ((a) * (a)) : \
+     ((op) == CUB) ? ((a) * (a) * (a)) : \
+     ((op) == SIN) ? (sin(a)) : \
+     ((op) == COS) ? (cos(a)) : \
+     ((op) == TAN) ? (tan(a)) : 0)
+
+#define str_to_special(str) \
+    ((strcmp((str), ("x!")) == 0) ? (FAC) : \
+     (strcmp((str), ("\u221Ax")) == 0) ? (SQT) : \
+     (strcmp((str), ("\u221Bx")) == 0) ? (CBT) : \
+     (strcmp((str), ("+/-")) == 0) ? (SGN) : \
+     (strcmp((str), ("%")) == 0) ? (PCT) : \
+     (strcmp((str), ("x²")) == 0) ? (SQR) : \
+     (strcmp((str), ("x³")) == 0) ? (CUB) : \
+     (strcmp((str), ("sin")) == 0) ? (SIN) : \
+     (strcmp((str), ("cos")) == 0) ? (COS) : \
+    (strcmp((str), ("tan")) == 0) ? (TAN) : NUL)
+     
 
 /* Object storing information about the calculator's current state */
 typedef struct Data {
@@ -109,19 +142,20 @@ static char *num2str(double num, bool decimal, int decimals)
     }
 
     int int_part = (int)num;
-    /* number of digits before decimal point */
+    /* number of digits before the decimal point */
     int int_digits = (int_part == 0) ? 0 : ceil(log10(abs(int_part)));
 
-    /* num has > 7 digits after decimal point */
+    /* handle large numbers or high precision */
     int precision = TOT_DIGITS - int_digits;
     if (precision < 0) precision = 0;
     return precise_num2str(num, precision);
 }
 
 /* Displays a given number on the calculator's screen. */
-static void display_num(double num, Data *data)
+static void display_num(Data *data)
 {
-    char *num_displayed = num2str(num, data->decimal, data->decimals);
+    printf("%f\n", data->num);
+    char *num_displayed = num2str(data->num, data->decimal, data->decimals);
     display_str(data, num_displayed);
 }
 
@@ -140,17 +174,17 @@ static void entering(GtkWidget *widget, gpointer user_data)
         return;
     }
 
-    /* if previous display shows inf */
-    if (strcmp(prev, "inf") == 0) {
-        display_str(data, button_label);
-        data->num = 0;
-        data->result = 0;
-    }
-
     /* ignore leading zeros */
     if (strcmp(prev, "0") == 0 && entered_num == 0) {
         data->num = 0;
         return;
+    }
+
+    /* if previous display shows inf or nan */
+    if (strcmp(prev, "inf") == 0 || strcmp(prev, "nan") == 0) {
+        display_str(data, button_label);
+        data->num = 0;
+        data->result = 0;
     }
 
     /* handle decimal fraction input mode */
@@ -168,12 +202,14 @@ static void entering(GtkWidget *widget, gpointer user_data)
         data->num = data->num * 10 + entered_num;
     }
 
-    display_num(data->num, data);
+    display_num(data);
 }
 
-/* Handles the (-) button */
-static void sign(GtkWidget *widget, gpointer user_data)
+static void special_op(GtkWidget *widget, gpointer user_data)
 {
+    char *button_label = (char *)gtk_button_get_label(GTK_BUTTON(widget));
+    special op = str_to_special(button_label);
+
     Data *data = (Data *)user_data;
     data->decimal = false; /* exit decimal fraction input mode */
     data->decimals = 0;
@@ -182,24 +218,8 @@ static void sign(GtkWidget *widget, gpointer user_data)
 
     /* this button is ignored if an operation is being performed */
     if (str_to_op(prev_num) == DEFAULT) {
-        data->num = 0 - data->num;
-        display_num(data->num, data);
-    }
-}
-
-/* Handles the (%) button */
-static void percent(GtkWidget *widget, gpointer user_data)
-{
-    Data *data = (Data *)user_data;
-    data->decimal = false; /* exit decimal fraction input mode */
-    data->decimals = 0;
-
-    char *prev_num = get_display(data);
-
-    /* this button is ignored if an operation is being performed */
-    if (str_to_op(prev_num) == DEFAULT) {
-        data->num /= (float)100;
-        display_num(data->num, data);
+        data->num = un_op(data->num, op);
+        display_num(data);
     }
 }
 
@@ -239,13 +259,13 @@ static void binary_op(GtkWidget *widget, gpointer user_data)
     data->decimals = 0;
 
     /* evaluate stored expression */
-    data->result = do_op(data->result, data->op, data->num);
+    data->result = bin_op(data->result, data->op, data->num);
     data->op = op;
 
     /* if "=" was entered, display result */
     if (op == DEFAULT) {
-        display_num(data->result, data);
         data->num = data->result;
+        display_num(data);
         data->result = 0;
         return;
     }
@@ -295,9 +315,9 @@ static void activate(GtkApplication *app, gpointer user_data)
     gtk_grid_attach(GTK_GRID(grid), frame, 0, 0, 4, 1);
 
     /* create buttons for numbers 0-9 */
-    new_button(grid, "0", entering, user_data, 1, 5);
+    new_button(grid, "0", entering, user_data, 1, 7);
     char label[] = "1";
-    for (int i = 4; i > 1; i--) {
+    for (int i = 6; i > 3; i--) {
         for (int j = 0; j < 3; j++) {
             new_button(grid, label, entering, user_data, j, i);
             label[0]++;
@@ -305,21 +325,30 @@ static void activate(GtkApplication *app, gpointer user_data)
     }
 
     /* create non-numerical buttons */
-    new_button(grid, "C", clear, user_data, 0, 1);
-    new_button(grid, "+/-", sign, user_data, 1, 1);
-    new_button(grid, "%", percent, user_data, 2, 1);
-    new_button(grid, ".", point, user_data, 2, 5);
-    new_button(grid, "÷", binary_op, user_data, 3, 1);
-    new_button(grid, "\u00D7", binary_op, user_data, 3, 2);
-    new_button(grid, "-", binary_op, user_data, 3, 3);
-    new_button(grid, "+", binary_op, user_data, 3, 4);
-    new_button(grid, "=", binary_op, user_data, 3, 5);
+    new_button(grid, "\u221Ax", special_op, user_data, 0, 1);
+    new_button(grid, "\u221Bx", special_op, user_data, 1, 1);
+    new_button(grid, "x²", special_op, user_data, 2, 1);
+    new_button(grid, "x³", special_op, user_data, 3, 1);
+    new_button(grid, "x!", special_op, user_data, 0, 2);
+    new_button(grid, "sin", special_op, user_data, 1, 2);
+    new_button(grid, "cos", special_op, user_data, 2, 2);
+    new_button(grid, "tan", special_op, user_data, 3, 2);
+    new_button(grid, "C", clear, user_data, 0, 3);
+    new_button(grid, "+/-", special_op, user_data, 1, 3);
+    new_button(grid, "%", special_op, user_data, 2, 3);
+    new_button(grid, ".", point, user_data, 2, 7);
+    new_button(grid, "÷", binary_op, user_data, 3, 3);
+    new_button(grid, "\u00D7", binary_op, user_data, 3, 4);
+    new_button(grid, "-", binary_op, user_data, 3, 5);
+    new_button(grid, "+", binary_op, user_data, 3, 6);
+    new_button(grid, "=", binary_op, user_data, 3, 7);
 
     /* create "Off" button, which exits window */
     GtkWidget *button = gtk_button_new_with_label("Off");
     g_signal_connect_swapped(button, "clicked", G_CALLBACK(gtk_window_destroy),
                                                                        window);
-    gtk_grid_attach(GTK_GRID(grid), button, 0, 5, 1, 1);
+
+    gtk_grid_attach(GTK_GRID(grid), button, 0, 7, 1, 1);
 
     /* present the window */
     gtk_window_present(GTK_WINDOW(window));
