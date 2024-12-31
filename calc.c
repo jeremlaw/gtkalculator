@@ -154,7 +154,6 @@ static char *num2str(double num, bool decimal, int decimals)
 /* Displays a given number on the calculator's screen. */
 static void display_num(Data *data)
 {
-    printf("%f\n", data->num);
     char *num_displayed = num2str(data->num, data->decimal, data->decimals);
     display_str(data, num_displayed);
 }
@@ -205,6 +204,7 @@ static void entering(GtkWidget *widget, gpointer user_data)
     display_num(data);
 }
 
+/* Handles unary operator inputs */
 static void special_op(GtkWidget *widget, gpointer user_data)
 {
     char *button_label = (char *)gtk_button_get_label(GTK_BUTTON(widget));
@@ -347,7 +347,6 @@ static void activate(GtkApplication *app, gpointer user_data)
     GtkWidget *button = gtk_button_new_with_label("Off");
     g_signal_connect_swapped(button, "clicked", G_CALLBACK(gtk_window_destroy),
                                                                        window);
-
     gtk_grid_attach(GTK_GRID(grid), button, 0, 7, 1, 1);
 
     /* present the window */
